@@ -1,96 +1,59 @@
 # Korean ASR Benchmark Configuration
-# Test all models, rank them, discover best performers
+# Tests top 5 models on your own kitchen audio samples — no large dataset downloads required
+
 benchmark:
   language: "ko_kr"
-  test_samples: 100  # Number of FLEURS samples to test
-  batch_size: 8
-  device: "cuda"  # or "cpu"
-datasets:
-  fleurs:
-    name: "google/fleurs"
-    split: "test"
-    subset: "ko_kr"
+  device: "cpu"  # change to "mps" for Apple Silicon
 
-  kitchen:
-    audio_dir: "kitchen_samples/audio"
-    transcripts_dir: "kitchen_samples/transcriptions"
-# LIST ALL CANDIDATES NEUTRALLY - NO PRIORITIES
+# Your kitchen audio clips go here
+dataset:
+  audio_dir: "kitchen_samples/audio"
+  transcripts_dir: "kitchen_samples/transcriptions"
+  metadata_file: "kitchen_samples/metadata.json"
+
+# Top 5 models selected from existing leaderboards (see README for sources)
 models:
-  # Group 1: Major Multilingual Models
+
+  # --- API models: no download needed, just set env vars ---
+
+  openai-whisper-api:
+    type: "api"
+    provider: "openai"
+    model: "whisper-1"
+    language: "ko"
+    # export OPENAI_API_KEY=your_key
+
+  google-speech:
+    type: "api"
+    provider: "google"
+    language: "ko-KR"
+    # export GOOGLE_APPLICATION_CREDENTIALS=/path/to/credentials.json
+
+  clova-speech:
+    type: "api"
+    provider: "naver"
+    language: "Kor"
+    # export NAVER_CLIENT_ID=your_id
+    # export NAVER_CLIENT_SECRET=your_secret
+
+  # --- Local models: require disk space ---
+
   whisper-large-v3:
+    type: "local"
     name: "openai/whisper-large-v3"
     language: "korean"
+    # ~3GB download — skip if low on disk
 
-  whisper-large-v2:
-    name: "openai/whisper-large-v2"
-    language: "korean"
-
-  whisper-medium:
-    name: "openai/whisper-medium"
-    language: "korean"
-
-  mms-1b-all:
-    name: "facebook/mms-1b-all"
-    language: "kor"
-
-  # Group 2: Korean-Specific Models
-  yeonho-whisper-korean:
-    name: "Yeonho/whisper-large-v3-korean"
-    language: "korean"
-
-  open-mmlab-korean-asr:
-    name: "open-mmlab/korean-asr"
-
-  ai-nlp-korean-asr:
-    name: "ai-nlp/korean-asr-model"
-
-  # Group 3: Other Multilingual
-  nvidia-canary-1b:
-    name: "nvidia/canary-1b"
-    language: "ko"
-
-  silero-models:
-    name: "snakers4/silero-models"
-    model_type: "silero_stt"
-    language: "korean"
-
-  # Group 4: Additional Whisper Sizes
-  whisper-small:
-    name: "openai/whisper-small"
-    language: "korean"
-
-  whisper-base:
-    name: "openai/whisper-base"
-    language: "korean"
-
-  # Group 5: Korean Fine-tuned Community Models
-  whisper-medium-korean:
-    name: "vasista22/whisper-medium-korean"
-    language: "korean"
-
-  whisper-small-korean:
-    name: "vasista22/whisper-small-korean"
-    language: "korean"
-
-  kresnik-whisper-korean:
-    name: "kresnik/whisper-large-v2-korean"
-    language: "korean"
-
-  # Group 6: Wav2Vec2 Korean Models
   wav2vec2-korean:
+    type: "local"
     name: "kresnik/wav2vec2-large-xlsr-korean"
+    # ~1.3GB download
 
-  wav2vec2-korean-conformer:
-    name: "Minchae/wav2vec2-large-korean-conformer"
-
-  # Group 7: Hubert Korean
-  hubert-korean:
-    name: "team-lucid/hubert-base-korean"
 metrics:
   compute_cer: true
   compute_wer: true
-  compute_char_precision: true
   loanword_detection: true
+
 output:
   results_dir: "results"
   save_predictions: true
