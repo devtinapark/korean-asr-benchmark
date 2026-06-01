@@ -6,18 +6,18 @@ tqdm>=4.66.0
 requests>=2.31.0
 
 # Audio loading (supports MP3, WAV, FLAC, etc.)
-librosa>=0.10.0
+# Requires ffmpeg: brew install ffmpeg
+pydub>=0.25.0
+soundfile>=0.12.0
 
 # Metrics
 jiwer>=3.0.0
 
-# API models (lightweight — no model downloads)
+# API clients
 openai>=1.30.0
+requests>=2.31.0
 
-# Optional: Google Speech-to-Text
-# google-cloud-speech>=2.26.0
-
-# Optional: local models (requires ~1-3GB download per model)
+# Optional: local models (requires ~3GB+ download per model)
 # torch>=2.4.0
 # torchaudio>=2.4.0
 # transformers>=4.40.0
