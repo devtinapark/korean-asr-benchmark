@@ -9,11 +9,12 @@ from pathlib import Path
 from .benchmark import ASRBenchmark
 from .ranking import ModelRanker, RankingCriteria
 from .reporter import BenchmarkReporter
+from .html_reporter import save_html_report
 
 
 def run_full_benchmark(
     config_path: str = "config.yaml",
-    top_n: int = 5,
+    top_n: int = 2,  # OpenAI vs Deepgram
     output_dir: str = "results"
 ):
     """
@@ -25,7 +26,7 @@ def run_full_benchmark(
         output_dir: Output directory for results
     """
     print("\n" + "="*80)
-    print("KOREAN ASR BENCHMARK - Spoken Kitchen Use Case".center(80))
+    print("MULTILINGUAL ASR BENCHMARK — OpenAI vs Deepgram".center(80))
     print("="*80 + "\n")
 
     # Initialize benchmark
@@ -59,31 +60,45 @@ def run_full_benchmark(
     reporter = BenchmarkReporter(output_dir)
 
     metadata = {
-        "dataset": "FLEURS Korean (ko_kr)",
+        "dataset": "Kitchen Audio Samples",
         "num_samples": len(benchmark.data_loader) if benchmark.data_loader else 0,
         "config_file": config_path
     }
 
-    reporter.generate_all_reports(ranked_df, top_models, metadata)
+    per_model_samples = {name: r.per_sample_metrics for name, r in results.items()}
+    cost_data = {
+        name: {
+            "audio_minutes": r.total_audio_minutes,
+            "cost_per_minute": r.cost_per_minute,
+            "estimated_cost": r.estimated_cost,
+            "avg_latency": r.avg_latency,
+            "total_latency": r.total_latency,
+        }
+        for name, r in results.items()
+    }
+    reporter.generate_all_reports(ranked_df, top_models, metadata,
+                                  per_model_samples=per_model_samples,
+                                  cost_data=cost_data)
 
-    # Save detailed predictions for top models
-    if benchmark.config.get('output', {}).get('save_predictions', False):
-        from .reporter import PredictionExporter
-        exporter = PredictionExporter()
+    save_html_report(output_dir, ranked_df, top_models,
+                     per_model_samples=per_model_samples,
+                     cost_data=cost_data,
+                     metadata=metadata)
 
-        for model_name in top_models[:top_n]:
-            result = results[model_name]
-            if result.predictions and result.references:
-                exporter.export_predictions(
-                    model_name,
-                    result.references,
-                    result.predictions
-                )
+    from .reporter import PredictionExporter
+    exporter = PredictionExporter(f"{output_dir}/predictions")
+    for name, result in results.items():
+        if result.predictions:
+            exporter.export_predictions(
+                name, result.references, result.predictions,
+                sample_ids=result.sample_ids,
+                per_sample_metrics=result.per_sample_metrics,
+            )
 
     print("\n" + "="*80)
     print("Benchmark Complete!".center(80))
     print("="*80)
-    print(f"\nTop {top_n} models saved to: {output_dir}/top_5_models.txt")
+    print(f"\nRankings saved to: {output_dir}/top_models.txt")
     print(f"Full report: {output_dir}/benchmark_report.md")
     print(f"Results: {output_dir}/results.csv\n")
 
@@ -110,9 +125,51 @@ def run_single_model(
 
     result = benchmark.run_single_model(model_name)
 
+    # Save results
+    results_dict = {model_name: result.to_dict()}
+    ranker = ModelRanker()
+    ranked_df = ranker.rank_models(results_dict)
+
+    reporter = BenchmarkReporter(output_dir)
+    metadata = {
+        "dataset": "Kitchen Audio Samples",
+        "num_samples": len(benchmark.data_loader),
+        "model": model_name,
+    }
+    per_model_samples = {model_name: result.per_sample_metrics}
+    cost_data = {model_name: {
+        "audio_minutes": result.total_audio_minutes,
+        "cost_per_minute": result.cost_per_minute,
+        "estimated_cost": result.estimated_cost,
+        "avg_latency": result.avg_latency,
+        "total_latency": result.total_latency,
+    }}
+    reporter.generate_all_reports(ranked_df, [model_name], metadata,
+                                  per_model_samples=per_model_samples,
+                                  cost_data=cost_data)
+
+    save_html_report(output_dir, ranked_df, [model_name],
+                     per_model_samples=per_model_samples,
+                     cost_data=cost_data,
+                     metadata=metadata)
+
+    from .reporter import PredictionExporter
+    exporter = PredictionExporter(f"{output_dir}/predictions")
+    if result.predictions:
+        exporter.export_predictions(
+            model_name,
+            result.references,
+            result.predictions,
+            sample_ids=result.sample_ids,
+            per_sample_metrics=result.per_sample_metrics,
+        )
+
     print("\n" + "="*80)
-    print("Single Model Benchmark Complete")
-    print("="*80 + "\n")
+    print("Complete!".center(80))
+    print("="*80)
+    print(f"\nReport: {output_dir}/benchmark_report.md")
+    print(f"CSV:    {output_dir}/results.csv")
+    print(f"Predictions: {output_dir}/predictions/{model_name.replace('/', '_')}_predictions.csv\n")
 
 
 def list_models(config_path: str = "config.yaml"):
@@ -156,8 +213,8 @@ Examples:
   # Run benchmark with custom config
   python -m src.main --config my_config.yaml
 
-  # Select top 10 models instead of 5
-  python -m src.main --top-n 10
+  # Compare Whisper vs Deepgram (default 2)
+  python -m src.main --top-n 2
 
   # Run single model
   python -m src.main --model whisper-large-v3
@@ -183,8 +240,8 @@ Examples:
     parser.add_argument(
         '--top-n',
         type=int,
-        default=5,
-        help='Number of top models to select (default: 5)'
+        default=2,
+        help='Number of top models to select (default: 2)'
     )
 
     parser.add_argument(
