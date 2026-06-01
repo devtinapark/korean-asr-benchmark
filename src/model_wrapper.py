@@ -1,273 +1,203 @@
 """
-Unified ASR Model Wrapper
-Provides consistent interface for different ASR model architectures
+ASR Model Wrappers
+Unified interface for API-based and local ASR models
 """
-from typing import Dict, Optional, List
-import torch
+from typing import Optional
+import os
+import io
 import numpy as np
-from transformers import (
-    WhisperProcessor, WhisperForConditionalGeneration,
-    Wav2Vec2Processor, Wav2Vec2ForCTC,
-    AutoProcessor, AutoModelForSpeechSeq2Seq, AutoModelForCTC,
-    pipeline
-)
-import warnings
-warnings.filterwarnings('ignore')
+import soundfile as sf
 
 
-class ASRModelWrapper:
-    """
-    Unified wrapper for ASR models from different architectures
-    """
+# ── Local HuggingFace wrapper ──────────────────────────────────────────────────
 
-    def __init__(
-        self,
-        model_name: str,
-        model_id: str,
-        language: Optional[str] = None,
-        device: str = "cpu",
-        use_pipeline: bool = True
-    ):
-        """
-        Initialize ASR model wrapper
+class LocalASRWrapper:
+    """Runs a HuggingFace ASR model locally via transformers pipeline"""
 
-        Args:
-            model_name: Display name for the model
-            model_id: HuggingFace model ID
-            language: Language code for the model
-            device: Device to run model on (cpu/cuda)
-            use_pipeline: Whether to use HF pipeline (simpler but less control)
-        """
+    def __init__(self, model_name: str, model_id: str, language: Optional[str], device: str):
+        import torch
+        from transformers import pipeline
+
         self.model_name = model_name
-        self.model_id = model_id
+        torch_device = 0 if device == "cuda" and torch.cuda.is_available() else -1
+
+        print(f"Loading {model_name} ({model_id}) — this requires a model download...")
+        self.pipe = pipeline(
+            "automatic-speech-recognition",
+            model=model_id,
+            device=torch_device,
+        )
         self.language = language
-        self.device = device
-        self.use_pipeline = use_pipeline
+        self.model_id = model_id
 
-        self.model = None
-        self.processor = None
-        self.pipe = None
-        self.model_type = self._detect_model_type()
-
-        print(f"Loading {model_name} ({model_id})...")
-        self._load_model()
-
-    def _detect_model_type(self) -> str:
-        """
-        Detect model architecture from model_id
-
-        Returns:
-            Model type string
-        """
-        model_id_lower = self.model_id.lower()
-
-        if "whisper" in model_id_lower:
-            return "whisper"
-        elif "wav2vec2" in model_id_lower:
-            return "wav2vec2"
-        elif "hubert" in model_id_lower:
-            return "hubert"
-        elif "mms" in model_id_lower:
-            return "mms"
-        elif "canary" in model_id_lower:
-            return "canary"
-        elif "silero" in model_id_lower:
-            return "silero"
-        else:
-            return "auto"
-
-    def _load_model(self):
-        """Load model and processor based on detected type"""
-        try:
-            if self.use_pipeline:
-                self._load_via_pipeline()
-            else:
-                self._load_via_transformers()
-        except Exception as e:
-            print(f"Warning: Failed to load {self.model_name}: {e}")
-            print("Attempting fallback loading method...")
-            try:
-                if self.use_pipeline:
-                    self._load_via_transformers()
-                else:
-                    self._load_via_pipeline()
-            except Exception as e2:
-                print(f"Error: Could not load {self.model_name}: {e2}")
-                raise
-
-    def _load_via_pipeline(self):
-        """Load model using HuggingFace pipeline"""
-        try:
-            # Determine task type
-            task = "automatic-speech-recognition"
-
-            # Create pipeline
-            self.pipe = pipeline(
-                task,
-                model=self.model_id,
-                device=0 if self.device == "cuda" and torch.cuda.is_available() else -1
-            )
-        except Exception as e:
-            raise RuntimeError(f"Pipeline loading failed: {e}")
-
-    def _load_via_transformers(self):
-        """Load model using transformers directly"""
-        if self.model_type in ["whisper"]:
-            self.processor = WhisperProcessor.from_pretrained(self.model_id)
-            self.model = WhisperForConditionalGeneration.from_pretrained(self.model_id)
-
-        elif self.model_type in ["wav2vec2", "hubert", "mms"]:
-            self.processor = Wav2Vec2Processor.from_pretrained(self.model_id)
-            self.model = Wav2Vec2ForCTC.from_pretrained(self.model_id)
-
-        else:
-            # Auto-detect
-            self.processor = AutoProcessor.from_pretrained(self.model_id)
-            try:
-                self.model = AutoModelForSpeechSeq2Seq.from_pretrained(self.model_id)
-            except:
-                self.model = AutoModelForCTC.from_pretrained(self.model_id)
-
-        # Move to device
-        if self.device == "cuda" and torch.cuda.is_available():
-            self.model = self.model.to("cuda")
-        self.model.eval()
-
-    def transcribe(
-        self,
-        audio: np.ndarray,
-        sampling_rate: int = 16000
-    ) -> str:
-        """
-        Transcribe audio to text
-
-        Args:
-            audio: Audio array
-            sampling_rate: Audio sampling rate
-
-        Returns:
-            Transcribed text
-        """
-        try:
-            if self.pipe is not None:
-                return self._transcribe_pipeline(audio, sampling_rate)
-            else:
-                return self._transcribe_transformers(audio, sampling_rate)
-        except Exception as e:
-            print(f"Transcription error for {self.model_name}: {e}")
-            return ""
-
-    def _transcribe_pipeline(
-        self,
-        audio: np.ndarray,
-        sampling_rate: int
-    ) -> str:
-        """Transcribe using pipeline"""
-        # Prepare input
-        audio_input = {
-            "array": audio,
-            "sampling_rate": sampling_rate
-        }
-
-        # Configure generation
+    def transcribe(self, audio: np.ndarray, sampling_rate: int = 16000) -> str:
         generate_kwargs = {}
-        if self.language and self.model_type == "whisper":
+        if self.language and "whisper" in self.model_id.lower():
             generate_kwargs["language"] = self.language
 
-        # Transcribe
         result = self.pipe(
-            audio_input,
+            {"array": audio, "sampling_rate": sampling_rate},
             generate_kwargs=generate_kwargs,
-            return_timestamps=False
         )
-
         return result["text"].strip()
 
-    def _transcribe_transformers(
-        self,
-        audio: np.ndarray,
-        sampling_rate: int
-    ) -> str:
-        """Transcribe using transformers directly"""
-        # Process input
-        inputs = self.processor(
-            audio,
-            sampling_rate=sampling_rate,
-            return_tensors="pt"
+
+# ── OpenAI Whisper API ─────────────────────────────────────────────────────────
+
+class OpenAIWhisperWrapper:
+    """Calls the OpenAI Whisper API — no local model download needed"""
+
+    def __init__(self, model_name: str, model: str = "whisper-1", language: str = "ko"):
+        import openai
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            raise EnvironmentError("OPENAI_API_KEY is not set. Run: export OPENAI_API_KEY=your_key")
+
+        self.model_name = model_name
+        self.client = openai.OpenAI(api_key=api_key)
+        self.model = model
+        self.language = language
+
+    def transcribe(self, audio: np.ndarray, sampling_rate: int = 16000) -> str:
+        # Write audio to an in-memory WAV buffer
+        buf = io.BytesIO()
+        sf.write(buf, audio, sampling_rate, format="WAV")
+        buf.seek(0)
+        buf.name = "audio.wav"  # OpenAI SDK uses the filename to detect format
+
+        response = self.client.audio.transcriptions.create(
+            model=self.model,
+            file=buf,
+            language=self.language,
+        )
+        return response.text.strip()
+
+
+# ── Google Cloud Speech-to-Text ────────────────────────────────────────────────
+
+class GoogleSpeechWrapper:
+    """Calls Google Cloud Speech-to-Text API"""
+
+    def __init__(self, model_name: str, language: str = "ko-KR"):
+        from google.cloud import speech
+        creds = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+        if not creds:
+            raise EnvironmentError(
+                "GOOGLE_APPLICATION_CREDENTIALS is not set.\n"
+                "Run: export GOOGLE_APPLICATION_CREDENTIALS=/path/to/credentials.json"
+            )
+
+        self.model_name = model_name
+        self.client = speech.SpeechClient()
+        self.language = language
+
+    def transcribe(self, audio: np.ndarray, sampling_rate: int = 16000) -> str:
+        from google.cloud import speech
+
+        buf = io.BytesIO()
+        sf.write(buf, audio, sampling_rate, format="WAV")
+        content = buf.getvalue()
+
+        config = speech.RecognitionConfig(
+            encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
+            sample_rate_hertz=sampling_rate,
+            language_code=self.language,
+        )
+        audio_obj = speech.RecognitionAudio(content=content)
+        response = self.client.recognize(config=config, audio=audio_obj)
+
+        if not response.results:
+            return ""
+        return response.results[0].alternatives[0].transcript.strip()
+
+
+# ── Naver Clova Speech ─────────────────────────────────────────────────────────
+
+class ClovaSpeechWrapper:
+    """
+    Calls Naver Clova Speech API.
+    Naver's Korean-native ASR — strong on colloquial Korean and Konglish.
+    Docs: https://api.ncloud-docs.com/docs/ai-application-service-clovaspeech
+    """
+
+    def __init__(self, model_name: str, language: str = "Kor"):
+        import requests  # noqa: F401 — just verify it's installed
+        client_id = os.environ.get("NAVER_CLIENT_ID")
+        client_secret = os.environ.get("NAVER_CLIENT_SECRET")
+        if not client_id or not client_secret:
+            raise EnvironmentError(
+                "NAVER_CLIENT_ID and NAVER_CLIENT_SECRET are not set.\n"
+                "Get credentials at: https://www.ncloud.com/product/aiService/clovaSpeech"
+            )
+
+        self.model_name = model_name
+        self.client_id = client_id
+        self.client_secret = client_secret
+        self.language = language
+        self.endpoint = "https://naveropenapi.apigw.ntruss.com/recog/v1/stt"
+
+    def transcribe(self, audio: np.ndarray, sampling_rate: int = 16000) -> str:
+        import requests
+
+        buf = io.BytesIO()
+        sf.write(buf, audio, sampling_rate, format="WAV")
+        buf.seek(0)
+
+        headers = {
+            "X-NCP-APIGW-API-KEY-ID": self.client_id,
+            "X-NCP-APIGW-API-KEY": self.client_secret,
+            "Content-Type": "application/octet-stream",
+        }
+        response = requests.post(
+            f"{self.endpoint}?lang={self.language}",
+            headers=headers,
+            data=buf.read(),
+        )
+        response.raise_for_status()
+        return response.json().get("text", "").strip()
+
+
+# ── Factory ────────────────────────────────────────────────────────────────────
+
+def create_model_wrapper(model_name: str, model_config: dict, device: str = "cpu"):
+    """
+    Returns the right wrapper based on config type field.
+
+    model_config must have:
+      type: "api" | "local"
+      provider: "openai" | "google" | "naver"   (when type=api)
+      name: "org/model-id"                        (when type=local)
+    """
+    model_type = model_config.get("type", "local")
+
+    if model_type == "api":
+        provider = model_config["provider"]
+        if provider == "openai":
+            return OpenAIWhisperWrapper(
+                model_name=model_name,
+                model=model_config.get("model", "whisper-1"),
+                language=model_config.get("language", "ko"),
+            )
+        elif provider == "google":
+            return GoogleSpeechWrapper(
+                model_name=model_name,
+                language=model_config.get("language", "ko-KR"),
+            )
+        elif provider == "naver":
+            return ClovaSpeechWrapper(
+                model_name=model_name,
+                language=model_config.get("language", "Kor"),
+            )
+        else:
+            raise ValueError(f"Unknown API provider: {provider}")
+
+    elif model_type == "local":
+        return LocalASRWrapper(
+            model_name=model_name,
+            model_id=model_config["name"],
+            language=model_config.get("language"),
+            device=device,
         )
 
-        # Move to device
-        if self.device == "cuda" and torch.cuda.is_available():
-            inputs = {k: v.to("cuda") for k, v in inputs.items()}
-
-        # Generate
-        with torch.no_grad():
-            if self.model_type == "whisper":
-                # For Whisper, use forced decoder ids for language
-                forced_decoder_ids = None
-                if self.language:
-                    forced_decoder_ids = self.processor.get_decoder_prompt_ids(
-                        language=self.language,
-                        task="transcribe"
-                    )
-
-                generated_ids = self.model.generate(
-                    inputs["input_features"],
-                    forced_decoder_ids=forced_decoder_ids
-                )
-                transcription = self.processor.batch_decode(
-                    generated_ids,
-                    skip_special_tokens=True
-                )[0]
-
-            else:
-                # For CTC models (Wav2Vec2, Hubert, MMS)
-                logits = self.model(**inputs).logits
-                predicted_ids = torch.argmax(logits, dim=-1)
-                transcription = self.processor.batch_decode(predicted_ids)[0]
-
-        return transcription.strip()
-
-    def batch_transcribe(
-        self,
-        audio_list: List[np.ndarray],
-        sampling_rate: int = 16000,
-        batch_size: int = 8
-    ) -> List[str]:
-        """
-        Transcribe multiple audio samples in batches
-
-        Args:
-            audio_list: List of audio arrays
-            sampling_rate: Audio sampling rate
-            batch_size: Batch size for processing
-
-        Returns:
-            List of transcriptions
-        """
-        transcriptions = []
-
-        for i in range(0, len(audio_list), batch_size):
-            batch = audio_list[i:i + batch_size]
-            batch_transcriptions = [
-                self.transcribe(audio, sampling_rate)
-                for audio in batch
-            ]
-            transcriptions.extend(batch_transcriptions)
-
-        return transcriptions
-
-    def get_info(self) -> Dict:
-        """
-        Get model information
-
-        Returns:
-            Dictionary with model metadata
-        """
-        return {
-            "name": self.model_name,
-            "model_id": self.model_id,
-            "type": self.model_type,
-            "language": self.language,
-            "device": self.device
-        }
+    else:
+        raise ValueError(f"Unknown model type: {model_type}. Use 'api' or 'local'.")
