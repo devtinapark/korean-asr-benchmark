@@ -1,12 +1,23 @@
-transformers>=4.40.0
-datasets>=2.19.0
-torch>=2.2.0
-torchaudio>=2.2.0
-evaluate>=0.4.1
-jiwer>=3.0.0
+# Core
+numpy<2
 pandas>=2.2.0
-numpy>=1.26.0
-tqdm>=4.66.0
-scipy>=1.12.0
-soundfile>=0.12.0
 pyyaml>=6.0.0
+tqdm>=4.66.0
+requests>=2.31.0
+
+# Audio loading (supports MP3, WAV, FLAC, etc.)
+librosa>=0.10.0
+
+# Metrics
+jiwer>=3.0.0
+
+# API models (lightweight — no model downloads)
+openai>=1.30.0
+
+# Optional: Google Speech-to-Text
+# google-cloud-speech>=2.26.0
+
+# Optional: local models (requires ~1-3GB download per model)
+# torch>=2.4.0
+# torchaudio>=2.4.0
+# transformers>=4.40.0
