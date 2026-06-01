@@ -1,191 +1,155 @@
 """
-FLEURS Korean Dataset Loader
-Loads and preprocesses audio data for ASR benchmarking
+Kitchen Audio Dataset Loader
+Loads local audio files and transcriptions for ASR benchmarking
 """
-from typing import Dict, List, Optional, Tuple
-from datasets import load_dataset, Dataset
+from typing import List, Optional
+from pathlib import Path
+import json
+import numpy as np
 import torch
 import torchaudio
-import numpy as np
 from dataclasses import dataclass
+
+try:
+    import librosa
+    _USE_LIBROSA = True
+except ImportError:
+    import soundfile as sf
+    _USE_LIBROSA = False
+
+
+def _load_audio(path: Path):
+    """Load audio file — supports MP3, WAV, FLAC, etc."""
+    if _USE_LIBROSA:
+        audio, sr = librosa.load(str(path), sr=None, mono=True)
+        return audio.astype(np.float32), sr
+    else:
+        import soundfile as sf
+        audio, sr = sf.read(str(path), dtype="float32")
+        if audio.ndim > 1:
+            audio = audio.mean(axis=1)  # stereo → mono
+        return audio, sr
 
 
 @dataclass
 class AudioSample:
-    """Container for audio sample with metadata"""
+    """Container for a single audio sample"""
     audio: np.ndarray
     sampling_rate: int
     text: str
     id: str
-    raw_transcription: str
 
 
-class FleursKoreanLoader:
+class KitchenAudioLoader:
     """
-    Loads FLEURS Korean dataset for ASR evaluation
+    Loads your own kitchen audio clips for ASR evaluation.
+
+    Expected layout (two options):
+
+    Option A — metadata.json index:
+        kitchen_samples/
+          metadata.json          [{"id": "001", "audio_file": "001.wav", "transcript": "..."}]
+          audio/001.wav
+          audio/002.wav
+
+    Option B — matching filenames (no metadata.json needed):
+        kitchen_samples/
+          audio/001.wav
+          transcriptions/001.txt   (plain text, one transcript per file)
     """
 
     def __init__(
         self,
-        subset: str = "ko_kr",
-        split: str = "test",
-        num_samples: Optional[int] = None,
-        cache_dir: Optional[str] = None
+        audio_dir: str,
+        transcripts_dir: Optional[str] = None,
+        metadata_file: Optional[str] = None,
     ):
-        """
-        Initialize FLEURS Korean dataset loader
+        self.audio_dir = Path(audio_dir)
+        self.transcripts_dir = Path(transcripts_dir) if transcripts_dir else None
+        self.metadata_file = Path(metadata_file) if metadata_file else None
+        self.samples: List[AudioSample] = []
 
-        Args:
-            subset: Language subset (default: ko_kr)
-            split: Dataset split (train/validation/test)
-            num_samples: Number of samples to load (None = all)
-            cache_dir: Directory to cache dataset
-        """
-        self.subset = subset
-        self.split = split
-        self.num_samples = num_samples
-        self.cache_dir = cache_dir
-        self.dataset = None
+    def load(self) -> List[AudioSample]:
+        if self.metadata_file and self.metadata_file.exists():
+            self._load_from_metadata()
+        elif self.transcripts_dir and self.transcripts_dir.exists():
+            self._load_from_matching_files()
+        else:
+            raise FileNotFoundError(
+                f"No audio data found. Add audio files to {self.audio_dir} "
+                f"and transcripts to {self.transcripts_dir}, or create a metadata.json. "
+                f"See kitchen_samples/metadata.json for the expected format."
+            )
 
-    def load(self) -> Dataset:
-        """
-        Load FLEURS dataset from HuggingFace
+        print(f"Loaded {len(self.samples)} kitchen audio samples")
+        return self.samples
 
-        Returns:
-            Loaded dataset
-        """
-        print(f"Loading FLEURS dataset: {self.subset} ({self.split} split)...")
+    def _load_from_metadata(self):
+        with open(self.metadata_file, "r", encoding="utf-8") as f:
+            entries = json.load(f)
 
-        self.dataset = load_dataset(
-            "google/fleurs",
-            self.subset,
-            split=self.split,
-            cache_dir=self.cache_dir,
-            trust_remote_code=True
+        for entry in entries:
+            audio_path = self.audio_dir / entry["audio_file"]
+            if not audio_path.exists():
+                print(f"  Warning: audio file not found, skipping: {audio_path}")
+                continue
+
+            audio, sr = _load_audio(audio_path)
+            self.samples.append(AudioSample(
+                audio=audio,
+                sampling_rate=sr,
+                text=entry["transcript"],
+                id=entry.get("id", audio_path.stem),
+            ))
+
+    def _load_from_matching_files(self):
+        audio_extensions = {".wav", ".mp3", ".flac", ".m4a", ".ogg"}
+        audio_files = sorted(
+            f for f in self.audio_dir.iterdir()
+            if f.suffix.lower() in audio_extensions
         )
 
-        if self.num_samples is not None:
-            self.dataset = self.dataset.select(range(min(self.num_samples, len(self.dataset))))
+        for audio_path in audio_files:
+            transcript_path = self.transcripts_dir / f"{audio_path.stem}.txt"
+            if not transcript_path.exists():
+                print(f"  Warning: no transcript for {audio_path.name}, skipping")
+                continue
 
-        print(f"Loaded {len(self.dataset)} samples")
-        return self.dataset
+            audio, sr = _load_audio(audio_path)
+            transcript = transcript_path.read_text(encoding="utf-8").strip()
 
-    def get_sample(self, idx: int) -> AudioSample:
-        """
-        Get a single preprocessed sample
+            self.samples.append(AudioSample(
+                audio=audio,
+                sampling_rate=sr,
+                text=transcript,
+                id=audio_path.stem,
+            ))
 
-        Args:
-            idx: Sample index
-
-        Returns:
-            AudioSample object
-        """
-        if self.dataset is None:
-            raise ValueError("Dataset not loaded. Call load() first.")
-
-        sample = self.dataset[idx]
-
-        # Extract audio array and sampling rate
-        audio_data = sample['audio']
-        audio_array = np.array(audio_data['array'], dtype=np.float32)
-        sampling_rate = audio_data['sampling_rate']
-
-        # Get transcription
-        transcription = sample['transcription']
-
-        return AudioSample(
-            audio=audio_array,
-            sampling_rate=sampling_rate,
-            text=transcription,
-            id=str(sample.get('id', idx)),
-            raw_transcription=sample.get('raw_transcription', transcription)
-        )
-
-    def __len__(self) -> int:
-        """Return dataset size"""
-        if self.dataset is None:
-            return 0
-        return len(self.dataset)
+    def __len__(self):
+        return len(self.samples)
 
     def __iter__(self):
-        """Iterate over all samples"""
-        for idx in range(len(self)):
-            yield self.get_sample(idx)
+        return iter(self.samples)
 
 
 class AudioPreprocessor:
-    """
-    Preprocesses audio for different ASR models
-    """
-
-    @staticmethod
-    def resample_audio(
-        audio: np.ndarray,
-        orig_sr: int,
-        target_sr: int
-    ) -> np.ndarray:
-        """
-        Resample audio to target sampling rate
-
-        Args:
-            audio: Audio array
-            orig_sr: Original sampling rate
-            target_sr: Target sampling rate
-
-        Returns:
-            Resampled audio array
-        """
-        if orig_sr == target_sr:
-            return audio
-
-        # Convert to torch tensor for resampling
-        audio_tensor = torch.from_numpy(audio).unsqueeze(0)
-        resampler = torchaudio.transforms.Resample(orig_sr, target_sr)
-        resampled = resampler(audio_tensor).squeeze(0).numpy()
-
-        return resampled
-
-    @staticmethod
-    def normalize_audio(audio: np.ndarray) -> np.ndarray:
-        """
-        Normalize audio to [-1, 1] range
-
-        Args:
-            audio: Audio array
-
-        Returns:
-            Normalized audio array
-        """
-        if audio.max() > 1.0 or audio.min() < -1.0:
-            audio = audio / np.max(np.abs(audio))
-        return audio
+    """Prepares audio arrays for ASR model input"""
 
     @staticmethod
     def prepare_for_model(
         audio: np.ndarray,
         sampling_rate: int,
         target_sr: int = 16000,
-        normalize: bool = True
-    ) -> Tuple[np.ndarray, int]:
-        """
-        Prepare audio for ASR model inference
-
-        Args:
-            audio: Audio array
-            sampling_rate: Current sampling rate
-            target_sr: Target sampling rate for model
-            normalize: Whether to normalize audio
-
-        Returns:
-            Tuple of (processed_audio, sampling_rate)
-        """
-        # Resample if needed
+    ):
         if sampling_rate != target_sr:
-            audio = AudioPreprocessor.resample_audio(audio, sampling_rate, target_sr)
+            audio_tensor = torch.from_numpy(audio).unsqueeze(0)
+            resampler = torchaudio.transforms.Resample(sampling_rate, target_sr)
+            audio = resampler(audio_tensor).squeeze(0).numpy()
             sampling_rate = target_sr
 
-        # Normalize if requested
-        if normalize:
-            audio = AudioPreprocessor.normalize_audio(audio)
+        # Normalize to [-1, 1]
+        peak = np.max(np.abs(audio))
+        if peak > 0:
+            audio = audio / peak
 
         return audio, sampling_rate
