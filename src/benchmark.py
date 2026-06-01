@@ -27,6 +27,14 @@ class BenchmarkResult:
     error: str = None
     predictions: List[str] = field(default_factory=list)
     references: List[str] = field(default_factory=list)
+    sample_ids: List[str] = field(default_factory=list)
+    per_sample_metrics: List[dict] = field(default_factory=list)
+    total_audio_minutes: float = 0.0
+    cost_per_minute: float = 0.0
+    estimated_cost: float = 0.0
+    latencies: List[float] = field(default_factory=list)  # seconds per clip
+    avg_latency: float = 0.0
+    total_latency: float = 0.0
 
     def to_dict(self) -> Dict:
         return {
@@ -94,18 +102,43 @@ class ASRBenchmark:
                 device=self.config["benchmark"].get("device", "cpu"),
             )
 
-            references, predictions = [], []
+            references, predictions, sample_ids = [], [], []
+            per_sample_metrics = []
+            total_audio_seconds = 0.0
             start_time = time.time()
 
             for sample in self.data_loader:
                 audio, sr = AudioPreprocessor.prepare_for_model(
                     sample.audio, sample.sampling_rate
                 )
+                total_audio_seconds += len(audio) / sr
+
+                t0 = time.time()
                 prediction = model.transcribe(audio, sr)
+                latency = time.time() - t0
+
                 predictions.append(prediction)
                 references.append(sample.text)
-                print(f"  [{sample.id}] ref : {sample.text}")
-                print(f"  [{sample.id}] pred: {prediction}")
+                sample_ids.append(sample.id)
+
+                # Per-sample metrics
+                sample_cer = self.metrics_calculator.calculate_cer([sample.text], [prediction])
+                sample_wer = self.metrics_calculator.calculate_wer([sample.text], [prediction])
+                per_sample_metrics.append({
+                    "id": sample.id,
+                    "cer": round(sample_cer, 4),
+                    "wer": round(sample_wer, 4),
+                    "latency_sec": round(latency, 2),
+                    "noise": "noise" in sample.id,
+                })
+                print(f"  [{sample.id}]")
+                print(f"    ref : {sample.text[:80]}{'...' if len(sample.text) > 80 else ''}")
+                print(f"    pred: {prediction[:80]}{'...' if len(prediction) > 80 else ''}")
+                print(f"    CER: {sample_cer:.4f}  WER: {sample_wer:.4f}  latency: {latency:.2f}s")
+
+                # Rate limit pause — outside latency measurement so it doesn't skew results
+                if model_config.get("provider") == "gladia":
+                    time.sleep(30)
 
             total_time = time.time() - start_time
 
@@ -123,8 +156,22 @@ class ASRBenchmark:
             result.num_samples = len(references)
             result.predictions = predictions
             result.references = references
+            result.sample_ids = sample_ids
+            result.per_sample_metrics = per_sample_metrics
 
-            print(f"\n  CER: {metrics.cer:.4f}  WER: {metrics.wer:.4f}  "
+            cost_per_minute = model_config.get("cost_per_minute", 0.0)
+            audio_minutes = total_audio_seconds / 60
+            result.total_audio_minutes = round(audio_minutes, 3)
+            result.cost_per_minute = cost_per_minute
+            result.estimated_cost = round(audio_minutes * cost_per_minute, 6)
+
+            latencies = [s["latency_sec"] for s in per_sample_metrics]
+            result.latencies = latencies
+            result.avg_latency = round(sum(latencies) / len(latencies), 2) if latencies else 0.0
+            result.total_latency = round(sum(latencies), 2)
+
+            print(f"\n  ── Combined ──────────────────────────────")
+            print(f"  CER: {metrics.cer:.4f}  WER: {metrics.wer:.4f}  "
                   f"Loanword acc: {result.loanword_accuracy:.4f}")
 
         except Exception as e:
