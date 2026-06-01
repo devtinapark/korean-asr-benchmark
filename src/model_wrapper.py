@@ -1,10 +1,9 @@
 """
 ASR Model Wrappers
-API-based wrappers for OpenAI, Deepgram, and Gladia
+API-based wrappers for OpenAI and Deepgram
 """
 import os
 import io
-import time
 import numpy as np
 import soundfile as sf
 
@@ -96,87 +95,6 @@ class DeepgramWrapper:
         return transcript.strip()
 
 
-# ── Gladia ─────────────────────────────────────────────────────────────────────
-
-class GladiaWrapper:
-    """
-    Calls Gladia transcription API.
-    Supports 99 languages with automatic language detection.
-    Docs: https://docs.gladia.io
-    """
-
-    def __init__(self, model_name: str):
-        api_key = os.environ.get("GLADIA_API_KEY")
-        if not api_key:
-            raise EnvironmentError(
-                "GLADIA_API_KEY not set. Get one at: https://app.gladia.io\n"
-                "Run: export GLADIA_API_KEY=your_key"
-            )
-        self.model_name = model_name
-        self.api_key = api_key
-        self.upload_url = "https://api.gladia.io/v2/upload"
-        self.transcription_url = "https://api.gladia.io/v2/pre-recorded"
-
-    def transcribe(self, audio: np.ndarray, sampling_rate: int = 16000) -> str:
-        import requests
-
-        buf = _audio_to_wav_bytes(audio, sampling_rate)
-
-        # Step 1: upload audio file (retry on 429)
-        upload_resp = self._post_with_retry(
-            self.upload_url,
-            headers={"x-gladia-key": self.api_key},
-            files={"audio": ("audio.wav", buf, "audio/wav")},
-        )
-        audio_url = upload_resp.json()["audio_url"]
-
-        # Step 2: request transcription
-        transcription_resp = self._post_with_retry(
-            self.transcription_url,
-            headers={
-                "x-gladia-key": self.api_key,
-                "Content-Type": "application/json",
-            },
-            json={
-                "audio_url": audio_url,
-                "detect_language": True,
-                "enable_code_switching": True,
-            },
-        )
-        result_url = transcription_resp.json()["result_url"]
-
-        # Step 3: poll until done
-        for _ in range(60):
-            time.sleep(5)
-            poll_resp = requests.get(
-                result_url,
-                headers={"x-gladia-key": self.api_key},
-            )
-            poll_resp.raise_for_status()
-            data = poll_resp.json()
-            if data.get("status") == "done":
-                utterances = data["result"]["transcription"]["utterances"]
-                return " ".join(u["text"] for u in utterances).strip()
-            if data.get("status") == "error":
-                raise RuntimeError(f"Gladia error: {data}")
-
-        raise TimeoutError("Gladia transcription timed out after 5 minutes")
-
-    def _post_with_retry(self, url: str, max_retries: int = 5, **kwargs):
-        import requests
-        delay = 10
-        for attempt in range(max_retries):
-            resp = requests.post(url, **kwargs)
-            if resp.status_code == 429:
-                print(f"  Gladia rate limit hit — waiting {delay}s before retry ({attempt+1}/{max_retries})")
-                time.sleep(delay)
-                delay *= 2  # exponential backoff
-                continue
-            resp.raise_for_status()
-            return resp
-        raise RuntimeError(f"Gladia rate limit exceeded after {max_retries} retries")
-
-
 # ── Factory ────────────────────────────────────────────────────────────────────
 
 def create_model_wrapper(model_name: str, model_config: dict, device: str = "cpu"):
@@ -194,10 +112,8 @@ def create_model_wrapper(model_name: str, model_config: dict, device: str = "cpu
                 model_name=model_name,
                 model=model_config.get("model", "nova-3"),
             )
-        elif provider == "gladia":
-            return GladiaWrapper(model_name=model_name)
         else:
-            raise ValueError(f"Unknown provider: {provider}. Use openai, deepgram, or gladia.")
+            raise ValueError(f"Unknown provider: {provider}. Use openai or deepgram.")
 
     elif model_type == "local":
         return _load_local_model(model_name, model_config, device)
