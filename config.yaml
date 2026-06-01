@@ -1,53 +1,35 @@
-# Korean ASR Benchmark Configuration
-# Tests top 5 models on your own kitchen audio samples — no large dataset downloads required
+# Multilingual ASR Benchmark — Kitchen Edition
+# Tests models that auto-detect mixed/code-switched language (EN, KO, ES, ZH)
 
 benchmark:
-  language: "ko_kr"
-  device: "cpu"  # change to "mps" for Apple Silicon
+  language: "multilingual"
+  device: "cpu"
 
-# Your kitchen audio clips go here
 dataset:
   audio_dir: "kitchen_samples/audio"
   transcripts_dir: "kitchen_samples/transcriptions"
   metadata_file: "kitchen_samples/metadata.json"
 
-# Top 5 models selected from existing leaderboards (see README for sources)
+# 2 models compared — all API-based, all auto-detect language, all handle code-switching
+# Pricing as of 2025-06 — update if rates change
 models:
 
-  # --- API models: no download needed, just set env vars ---
-
-  openai-whisper-api:
+  openai-gpt4o-transcribe:
     type: "api"
     provider: "openai"
-    model: "whisper-1"
-    language: "ko"
+    model: "gpt-4o-transcribe"
+    cost_per_minute: 0.006
     # export OPENAI_API_KEY=your_key
 
-  google-speech:
+  deepgram-nova-3:
     type: "api"
-    provider: "google"
-    language: "ko-KR"
-    # export GOOGLE_APPLICATION_CREDENTIALS=/path/to/credentials.json
+    provider: "deepgram"
+    model: "nova-3"
+    cost_per_minute: 0.0043
+    # export DEEPGRAM_API_KEY=your_key
 
-  clova-speech:
-    type: "api"
-    provider: "naver"
-    language: "Kor"
-    # export NAVER_CLIENT_ID=your_id
-    # export NAVER_CLIENT_SECRET=your_secret
-
-  # --- Local models: require disk space ---
-
-  whisper-large-v3:
-    type: "local"
-    name: "openai/whisper-large-v3"
-    language: "korean"
-    # ~3GB download — skip if low on disk
-
-  wav2vec2-korean:
-    type: "local"
-    name: "kresnik/wav2vec2-large-xlsr-korean"
-    # ~1.3GB download
+  # gladia excluded — free tier rate limits too restrictive for batch evaluation
+  # cost_per_minute: 0.0102 if on paid plan
 
 metrics:
   compute_cer: true
