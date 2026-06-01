@@ -35,29 +35,19 @@ class KoreanMetricsCalculator:
             jiwer.Strip(),
         ])
 
-    def normalize_korean_text(self, text: str) -> str:
-        """
-        Normalize Korean text for fair comparison
-
-        Args:
-            text: Input text
-
-        Returns:
-            Normalized text
-        """
-        # Convert to lowercase (for English loanwords)
+    def normalize_korean_text(self, text: str, strip_spaces: bool = False) -> str:
+        # Lowercase (covers English loanwords in mixed clips)
         text = text.lower()
-
-        # Remove extra whitespace
-        text = re.sub(r'\s+', ' ', text)
-
-        # Strip leading/trailing whitespace
-        text = text.strip()
-
-        # Remove punctuation (optional - can be configured)
-        # Korean punctuation: .,!?;:()[]{}「」『』
-        text = re.sub(r'[.,!?;:()\[\]{}「」『』·…~]', '', text)
-
+        # Remove punctuation
+        text = re.sub(r'[.,!?;:()\[\]{}「」『』·…~\-—\[\]]', '', text)
+        # Remove content in brackets like [gesture] [한 줌 표시]
+        text = re.sub(r'\[.*?\]', '', text)
+        if strip_spaces:
+            # For CER: remove all spaces — Korean spacing is inconsistent across models
+            text = re.sub(r'\s+', '', text)
+        else:
+            # For WER: collapse multiple spaces only
+            text = re.sub(r'\s+', ' ', text).strip()
         return text
 
     def calculate_cer(
@@ -78,8 +68,8 @@ class KoreanMetricsCalculator:
             CER value (0-1, lower is better)
         """
         if normalize:
-            references = [self.normalize_korean_text(ref) for ref in references]
-            hypotheses = [self.normalize_korean_text(hyp) for hyp in hypotheses]
+            references = [self.normalize_korean_text(ref, strip_spaces=True) for ref in references]
+            hypotheses = [self.normalize_korean_text(hyp, strip_spaces=True) for hyp in hypotheses]
 
         return cer(references, hypotheses)
 
