@@ -4,25 +4,27 @@ Compares **OpenAI gpt-4o-transcribe vs Deepgram Nova-3** on real kitchen audio c
 
 No large dataset downloads — runs on your own audio files.
 
+**[View live benchmark report →](https://devtinapark.github.io/korean-asr-benchmark)**
+
 ---
 
 ## Models Compared
 
 Both models were selected because they auto-detect language and handle code-switching within a single clip — no language hint required.
 
-| # | Model | Provider | Why selected |
-|---|-------|----------|-------------|
-| 1 | `gpt-4o-transcribe` | OpenAI API | Latest transcription model; auto-detects language; strong on Korean + English code-switching |
-| 2 | Nova-3 | Deepgram API | Fast, `detect_language=true`; competitive accuracy; lowest cost per minute |
+| #   | Model               | Provider     | Why selected                                                                                 |
+| --- | ------------------- | ------------ | -------------------------------------------------------------------------------------------- |
+| 1   | `gpt-4o-transcribe` | OpenAI API   | Latest transcription model; auto-detects language; strong on Korean + English code-switching |
+| 2   | Nova-3              | Deepgram API | Fast, `detect_language=true`; competitive accuracy; lowest cost per minute                   |
 
 **Why other models were excluded:**
 
-| Model | Reason |
-|-------|--------|
+| Model                       | Reason                                                       |
+| --------------------------- | ------------------------------------------------------------ |
 | Google Cloud Speech-to-Text | Requires fixed language code per request — no auto-detection |
-| Azure Speech | Auto-detection requires a separate pre-pass |
-| Naver Clova Speech | Korean-only |
-| Gladia | Free tier rate limits too restrictive for batch evaluation |
+| Azure Speech                | Auto-detection requires a separate pre-pass                  |
+| Naver Clova Speech          | Korean-only                                                  |
+| Gladia                      | Free tier rate limits too restrictive for batch evaluation   |
 
 ---
 
@@ -53,12 +55,14 @@ pip install -r requirements.txt
 ```
 
 Or with venv:
+
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
 Also requires ffmpeg for MP3 support:
+
 ```bash
 brew install ffmpeg
 ```
@@ -117,6 +121,7 @@ results/
 ```
 
 Open the HTML report:
+
 ```bash
 open results/benchmark_report.html
 ```
@@ -125,14 +130,14 @@ open results/benchmark_report.html
 
 ## Metrics
 
-| Metric | What it measures | Good value |
-|--------|-----------------|------------|
-| **CER** | Character Error Rate — primary for Korean (spaces stripped before comparison) | < 0.05 |
-| **WER** | Word Error Rate | < 0.10 |
-| **Loanword accuracy** | Code-switched terms like 오븐, 레시피, 간 맞추기 | > 0.85 |
-| **Noise delta** | CER increase from clean → noisy clips | Lower is better |
-| **Latency** | API response time per clip (excludes rate-limit pauses) | — |
-| **Cost** | Estimated cost based on audio duration × price/min | — |
+| Metric                | What it measures                                                              | Good value      |
+| --------------------- | ----------------------------------------------------------------------------- | --------------- |
+| **CER**               | Character Error Rate — primary for Korean (spaces stripped before comparison) | < 0.05          |
+| **WER**               | Word Error Rate                                                               | < 0.10          |
+| **Loanword accuracy** | Code-switched terms like 오븐, 레시피, 간 맞추기                              | > 0.85          |
+| **Noise delta**       | CER increase from clean → noisy clips                                         | Lower is better |
+| **Latency**           | API response time per clip (excludes rate-limit pauses)                       | —               |
+| **Cost**              | Estimated cost based on audio duration × price/min                            | —               |
 
 Composite score: CER 55% + WER 30% + Loanword 15%. Speed excluded (measures API latency, not model quality).
 
@@ -142,16 +147,17 @@ Composite score: CER 55% + WER 30% + Loanword 15%. Speed excluded (measures API 
 
 ## Pricing (as of 2025-06)
 
-| Model | Price/min | Free tier |
-|-------|-----------|-----------|
-| OpenAI gpt-4o-transcribe | $0.006 | No |
-| Deepgram Nova-3 | $0.0043 | $200 credit |
+| Model                    | Price/min | Free tier   |
+| ------------------------ | --------- | ----------- |
+| OpenAI gpt-4o-transcribe | $0.006    | No          |
+| Deepgram Nova-3          | $0.0043   | $200 credit |
 
 ---
 
 ## Adding your own audio clips
 
 Tips for recording:
+
 - **Length**: 5–20 seconds per clip
 - **Pairs**: record same content clean + with background noise to measure noise robustness
 - **Content**: mix pure Korean, English, and code-switched phrases for multilingual testing
@@ -162,6 +168,7 @@ Tips for recording:
 ## Contributing
 
 PRs welcome:
+
 - Additional audio clips (CC0 licensed)
 - New API model wrappers
 - Results from other languages (Spanish, Chinese)
