@@ -48,8 +48,11 @@ Thumbs.db
 # Results and data
 results/        # Generated benchmark results
 data/           # Downloaded datasets
-kitchen_samples/audio/*.wav  # Large audio files (keep transcriptions)
-*.mp3
+kitchen_samples/audio/*.wav
+kitchen_samples/audio/*.mp3
+kitchen_samples/audio/*.MP3
+kitchen_samples/audio/*.flac
+kitchen_samples/audio/*.m4a
 *.wav
 *.mp4
 
@@ -60,7 +63,11 @@ logs/
 # Config files with secrets
 config.local.yaml
 *.env
+.env
 secrets.yaml
+
+# Claude Code local settings
+.claude/settings.local.json
 
 # Jupyter
 .ipynb_checkpoints/
