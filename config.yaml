@@ -25,11 +25,9 @@ models:
     type: "api"
     provider: "deepgram"
     model: "nova-3"
-    cost_per_minute: 0.0043
+    cost_per_minute: 0.0052  # multilingual (detect_language=true) rate; English-only is $0.0043
     # export DEEPGRAM_API_KEY=your_key
 
-  # gladia excluded — free tier rate limits too restrictive for batch evaluation
-  # cost_per_minute: 0.0102 if on paid plan
 
 metrics:
   compute_cer: true
