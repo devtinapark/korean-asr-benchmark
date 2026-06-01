@@ -9,12 +9,16 @@ from dataclasses import dataclass
 
 @dataclass
 class RankingCriteria:
-    """Weights for different ranking criteria"""
-    cer_weight: float = 0.40  # Primary metric for Korean
-    wer_weight: float = 0.20  # Secondary
-    loanword_weight: float = 0.20  # Kitchen use case importance
-    speed_weight: float = 0.10  # Real-time consideration
-    ratio_weight: float = 0.10  # Korean-specific ratio validation
+    """
+    Weights for multilingual API benchmark.
+    Speed and CER/WER ratio removed — speed measures API latency not model quality,
+    and CER/WER ratio is only meaningful for Korean-specific models.
+    """
+    cer_weight: float = 0.55      # Primary accuracy metric
+    wer_weight: float = 0.30      # Secondary accuracy metric
+    loanword_weight: float = 0.15  # Code-switching / mixed language accuracy
+    speed_weight: float = 0.0
+    ratio_weight: float = 0.0
 
 
 class ModelRanker:
