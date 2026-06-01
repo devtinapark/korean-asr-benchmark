@@ -65,8 +65,8 @@ All models must auto-detect language without a language hint.
 | WER (Word Error Rate) | 0.1784 |
 | Loanword / Code-switching Accuracy | 0.9710 |
 | Audio Duration | 7.88 min |
-| Price per Minute | $0.0043 |
-| Estimated Cost (this run) | $0.033883 |
+| Price per Minute | $0.0052 |
+| Estimated Cost (this run) | $0.040975 |
 | Avg Latency per Clip | 1.97s |
 | Total Latency | 15.75s |
 
