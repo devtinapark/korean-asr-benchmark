@@ -100,13 +100,13 @@ class TestModelRanker(unittest.TestCase):
             for i in range(10)
         }
 
-        top_df, top_models = self.ranker.get_top_n(results, n=5)
+        top_df, top_models = self.ranker.get_top_n(results, n=2)
 
-        # Check we get 5 models
-        self.assertEqual(len(top_models), 5)
-        self.assertEqual(len(top_df), 5)
+        # Check we get 2 models (Whisper vs Deepgram)
+        self.assertEqual(len(top_models), 2)
+        self.assertEqual(len(top_df), 2)
 
-        # Check that model_0 (best metrics) is in top 5
+        # Check that model_0 (best metrics) is in the comparison
         self.assertIn("model_0", top_models)
 
     def test_skip_models_with_errors(self):
