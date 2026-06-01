@@ -1,74 +1,71 @@
-# Multilingual ASR Benchmark — Kitchen Edition
+# Korean/English Kitchen ASR Benchmark
 
-Compares **OpenAI gpt-4o-transcribe vs Deepgram Nova-3** on real kitchen audio clips containing English, Korean, and code-switched speech. Tests clean vs. background noise.
+Compares **OpenAI gpt-4o-transcribe vs Deepgram Nova-3** on real kitchen audio — English, Korean, and code-switched speech, clean and noisy. Built to pick the right ASR model for [Spoken Kitchen](https://spoken.kitchen), a bilingual app that helps immigrant families preserve heirloom recipes passed down through voice.
 
-No large dataset downloads — runs on your own audio files.
+No large dataset downloads. Runs on your own audio files.
 
 **[View live benchmark report →](https://devtinapark.github.io/korean-asr-benchmark)**
 
 ---
 
-## Models Compared
+## Results
 
-Both models were selected because they auto-detect language and handle code-switching within a single clip — no language hint required.
+| Model                   | CER        | WER        | Avg latency | Cost/min    |
+| ----------------------- | ---------- | ---------- | ----------- | ----------- |
+| openai-gpt4o-transcribe | **0.0528** | **0.1135** | 4.01s       | $0.0060     |
+| deepgram-nova-3         | 0.0773     | 0.1784     | **1.97s**   | **$0.0052** |
 
-| #   | Model               | Provider     | Why selected                                                                                 |
-| --- | ------------------- | ------------ | -------------------------------------------------------------------------------------------- |
-| 1   | `gpt-4o-transcribe` | OpenAI API   | Latest transcription model; auto-detects language; strong on Korean + English code-switching |
-| 2   | Nova-3              | Deepgram API | Fast, `detect_language=true`; competitive accuracy; lowest cost per minute                   |
+**Noise robustness** (CER degradation clean → noisy):
 
----
+| Model                   | Clean CER | Noisy CER | Δ       |
+| ----------------------- | --------- | --------- | ------- |
+| openai-gpt4o-transcribe | 0.0440    | 0.0660    | +0.0221 |
+| deepgram-nova-3         | 0.0633    | 0.0969    | +0.0336 |
 
-## Sources / Leaderboard Attribution
-
-For blog post citations — this comparison is based on:
-
-1. **OpenAI Whisper paper** (Radford et al., 2022) — "Robust Speech Recognition via Large-Scale Weak Supervision." Table 8 shows per-language CER including Korean. [arxiv.org/abs/2212.04356](https://arxiv.org/abs/2212.04356)
-
-2. **Papers With Code — Speech Recognition (Korean)** — Community leaderboard. [paperswithcode.com/task/speech-recognition](https://paperswithcode.com/task/speech-recognition)
-
-3. **KsponSpeech benchmark** — Ko et al., 2020: "KsponSpeech: Korean Spontaneous Speech Corpus for Automatic Speech Recognition." [MDPI Applied Sciences](https://www.mdpi.com/2076-3417/10/19/6936)
-
-4. **HuggingFace Open ASR Leaderboard** — Open model comparisons including Korean. [huggingface.co/spaces/hf-audio/open_asr_leaderboard](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard)
-
-> Rankings reflect the state of multilingual ASR as of mid-2025. Verify against current leaderboards before publication.
+GPT-4o-transcribe wins on accuracy, especially on noisy Korean. Nova-3 wins on latency and cost. Both handle code-switched terms like 미역국 and 간 맞추기 inside English sentences near-perfectly.
 
 ---
 
-## Quick Start
+## Why these two models
+
+Both auto-detect language and handle code-switching within a single clip — no language hint required. For audio that shifts between English and Korean mid-sentence, that was non-negotiable.
+
+| Model               | Provider     | Why                                                                                          |
+| ------------------- | ------------ | -------------------------------------------------------------------------------------------- |
+| `gpt-4o-transcribe` | OpenAI API   | Latest transcription model; auto-detects language; strong on Korean + English code-switching |
+| `nova-3`            | Deepgram API | `detect_language=true`; ~2× faster latency; 13% cheaper at multilingual rate                 |
+
+---
+
+## Quick start
 
 ### 1. Install dependencies
 
 ```bash
-conda create -n korean-asr python=3.11
-conda activate korean-asr
-pip install -r requirements.txt
-```
-
-Or with venv:
-
-```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+brew install ffmpeg  # required for MP3 support
 ```
 
-Also requires ffmpeg for MP3 support:
+### 2. Add your audio
 
-```bash
-brew install ffmpeg
-```
-
-### 2. Add your audio clips
-
-Place audio files in `kitchen_samples/audio/` and fill in `kitchen_samples/metadata.json`:
+Place files in `kitchen_samples/audio/` and fill in `kitchen_samples/metadata.json`:
 
 ```json
 [
   {
     "id": "001",
-    "audio_file": "001_boil_water.wav",
+    "audio_file": "001_boil_water.MP3",
     "transcript": "물이 끓고 있어요. 불 좀 줄여줘.",
+    "language": "ko",
     "noise": false
+  },
+  {
+    "id": "001-noise",
+    "audio_file": "001_boil_water_kitchen.MP3",
+    "transcript": "물이 끓고 있어요. 불 좀 줄여줘.",
+    "language": "ko",
+    "noise": true
   }
 ]
 ```
@@ -85,15 +82,10 @@ export DEEPGRAM_API_KEY=your_key    # console.deepgram.com
 ### 4. Run
 
 ```bash
-# Compare both models
-python -m src.main
-
-# Test one model
-python -m src.main --model openai-gpt4o-transcribe
+python -m src.main                                 # both models
+python -m src.main --model openai-gpt4o-transcribe # single model
 python -m src.main --model deepgram-nova-3
-
-# List configured models
-python -m src.main --list-models
+python -m src.main --list-models                   # list configured models
 ```
 
 ---
@@ -102,8 +94,8 @@ python -m src.main --list-models
 
 ```
 results/
-├── benchmark_report.html  # Visual comparison report — open in browser
-├── benchmark_report.md    # Markdown report
+├── benchmark_report.html   # open in browser
+├── benchmark_report.md
 ├── results.csv
 ├── results.json
 └── predictions/
@@ -111,58 +103,56 @@ results/
     └── deepgram-nova-3_predictions.csv
 ```
 
-Open the HTML report:
-
-```bash
-open results/benchmark_report.html
-```
-
 ---
 
 ## Metrics
 
-| Metric                | What it measures                                                              | Good value      |
-| --------------------- | ----------------------------------------------------------------------------- | --------------- |
-| **CER**               | Character Error Rate — primary for Korean (spaces stripped before comparison) | < 0.05          |
-| **WER**               | Word Error Rate                                                               | < 0.10          |
-| **Loanword accuracy** | Code-switched terms like 오븐, 레시피, 간 맞추기                              | > 0.85          |
-| **Noise delta**       | CER increase from clean → noisy clips                                         | Lower is better |
-| **Latency**           | API response time per clip (excludes rate-limit pauses)                       | —               |
-| **Cost**              | Estimated cost based on audio duration × price/min                            | —               |
+| Metric                   | What it measures                                         | Primary use         |
+| ------------------------ | -------------------------------------------------------- | ------------------- |
+| **CER**                  | Character Error Rate — spaces stripped before comparison | Korean (primary)    |
+| **WER**                  | Word Error Rate                                          | English (secondary) |
+| **Code-switch accuracy** | Korean terms in English sentences and vice versa         | Both                |
+| **Noise delta**          | CER increase from clean → noisy clips                    | Robustness          |
+| **Latency**              | API response time per clip (excludes rate-limit pauses)  | Production fit      |
+| **Cost**                 | Audio duration × price/min                               | Budget planning     |
 
-Composite score: CER 55% + WER 30% + Loanword 15%. Speed excluded (measures API latency, not model quality).
+Composite score: CER 55% + WER 30% + Code-switch accuracy 15%. Latency excluded from quality score.
 
-> **Korean CER note:** Spaces are stripped before computing CER since Korean spacing (띄어쓰기) is inconsistent across models. This follows standard Korean ASR evaluation practice (KsponSpeech paper).
-
----
-
-## Pricing (as of 2025-06)
-
-| Model                    | Price/min | Free tier   |
-| ------------------------ | --------- | ----------- |
-| OpenAI gpt-4o-transcribe | $0.006    | No          |
-| Deepgram Nova-3          | $0.0052   | $200 credit |
+> **Korean CER note:** Spaces are stripped before computing CER since Korean spacing (띄어쓰기) is inconsistent across models and human transcribers. Follows KsponSpeech evaluation convention.
 
 ---
 
-## Adding your own audio clips
+## Pricing (as of 2026-06)
 
-Tips for recording:
+| Model                          | Price/min | Free tier          |
+| ------------------------------ | --------- | ------------------ |
+| OpenAI gpt-4o-transcribe       | $0.006    | $5 new user credit |
+| Deepgram Nova-3 (multilingual) | $0.0052   | $200 credit        |
 
-- **Length**: 5–20 seconds per clip
-- **Pairs**: record same content clean + with background noise to measure noise robustness
-- **Content**: mix pure Korean, English, and code-switched phrases for multilingual testing
-- **Set `"noise": true`** in metadata.json for noisy clips — the report uses this for noise impact analysis
+> Deepgram's $0.0052/min is the multilingual pre-recorded rate. English-only is $0.0043/min. Use the multilingual rate if you're running `detect_language=true` on mixed-language audio.
+
+---
+
+## Tips for recording your own clips
+
+- **Length:** 5–20 seconds per clip
+- **Pairs:** record the same content clean + noisy to measure noise robustness
+- **Content:** mix Korean, English, and code-switched phrases
+- **Mark noisy clips:** set `"noise": true` in metadata.json — the report uses this for noise impact analysis
+
+---
+
+## References
+
+- **KsponSpeech** — Ko et al., 2020. Korean spontaneous speech corpus. [MDPI Applied Sciences](https://www.mdpi.com/2076-3417/10/19/6936)
+- **OpenAI Whisper paper** — Radford et al., 2022. Per-language CER baselines. [arxiv.org/abs/2212.04356](https://arxiv.org/abs/2212.04356)
+- **HuggingFace Open ASR Leaderboard** — [huggingface.co/spaces/hf-audio/open_asr_leaderboard](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard)
 
 ---
 
 ## Contributing
 
-PRs welcome:
-
-- Additional audio clips (CC0 licensed)
-- New API model wrappers
-- Results from other languages (Spanish, Chinese)
+PRs welcome — additional audio clips (CC0 licensed), new model wrappers, results from other languages.
 
 ## License
 
