@@ -23,36 +23,36 @@ All models must auto-detect language without a language hint.
 
 | Metric | Value |
 |--------|-------|
-| Composite Score | 0.9250 |
-| CER (Character Error Rate) | 0.0633 |
-| WER (Word Error Rate) | 0.1260 |
-| Loanword / Code-switching Accuracy | 0.9710 |
+| Composite Score | 1.0000 |
+| CER (Character Error Rate) | 0.0528 |
+| WER (Word Error Rate) | 0.1135 |
+| Loanword / Code-switching Accuracy | 0.9742 |
 | Audio Duration | 7.88 min |
 | Price per Minute | $0.0060 |
 | Estimated Cost (this run) | $0.047279 |
-| Avg Latency per Clip | 3.54s |
-| Total Latency | 28.34s |
+| Avg Latency per Clip | 4.01s |
+| Total Latency | 32.10s |
 
 **Noise impact:**
 
 | | Avg CER |
 |---|---------|
-| Clean clips | 0.0448 |
-| Noisy clips | 0.0770 |
-| Degradation (Δ) | +0.0322 |
+| Clean clips | 0.0440 |
+| Noisy clips | 0.0660 |
+| Degradation (Δ) | +0.0221 |
 
 **Per-sample breakdown:**
 
 | Sample | CER | WER |
 |--------|-----|-----|
 | en-a-clean | 0.0401 | 0.0473 |
-| en-a-noise | 0.0868 | 0.1351 |
+| en-a-noise | 0.0518 | 0.0878 |
 | en-b-clean | 0.0472 | 0.0818 |
-| en-b-noise | 0.0916 | 0.1384 |
-| ko-a-clean | 0.0582 | 0.1980 |
-| ko-a-noise | 0.0548 | 0.1782 |
-| ko-b-clean | 0.0337 | 0.1034 |
-| ko-b-noise | 0.0749 | 0.1724 |
+| en-b-noise | 0.0572 | 0.1006 |
+| ko-a-clean | 0.0548 | 0.2079 |
+| ko-a-noise | 0.0651 | 0.1980 |
+| ko-b-clean | 0.0337 | 0.0690 |
+| ko-b-noise | 0.0899 | 0.1810 |
 
 ### 2. deepgram-nova-3
 
@@ -60,15 +60,15 @@ All models must auto-detect language without a language hint.
 
 | Metric | Value |
 |--------|-------|
-| Composite Score | 0.0750 |
+| Composite Score | 0.0000 |
 | CER (Character Error Rate) | 0.0773 |
 | WER (Word Error Rate) | 0.1784 |
 | Loanword / Code-switching Accuracy | 0.9710 |
 | Audio Duration | 7.88 min |
 | Price per Minute | $0.0043 |
 | Estimated Cost (this run) | $0.033883 |
-| Avg Latency per Clip | 1.95s |
-| Total Latency | 15.59s |
+| Avg Latency per Clip | 1.97s |
+| Total Latency | 15.75s |
 
 **Noise impact:**
 
@@ -95,8 +95,8 @@ All models must auto-detect language without a language hint.
 
 | Rank | Model | Composite Score | CER | WER | Loanword Acc | Cost (this run) |
 |------|-------|----------------|-----|-----|--------------|-----------------|
-| 1 | openai-gpt4o-transcribe | 0.9250 | 0.0633 | 0.1260 | 0.9710 | $0.047279 |
-| 2 | deepgram-nova-3 | 0.0750 | 0.0773 | 0.1784 | 0.9710 | $0.033883 |
+| 1 | openai-gpt4o-transcribe | 1.0000 | 0.0528 | 0.1135 | 0.9742 | $0.047279 |
+| 2 | deepgram-nova-3 | 0.0000 | 0.0773 | 0.1784 | 0.9710 | $0.033883 |
 
 ## Metrics Explanation
 
