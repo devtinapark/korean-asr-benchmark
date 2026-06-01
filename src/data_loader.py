@@ -6,29 +6,18 @@ from typing import List, Optional
 from pathlib import Path
 import json
 import numpy as np
-import torch
-import torchaudio
 from dataclasses import dataclass
 
-try:
-    import librosa
-    _USE_LIBROSA = True
-except ImportError:
-    import soundfile as sf
-    _USE_LIBROSA = False
-
-
 def _load_audio(path: Path):
-    """Load audio file — supports MP3, WAV, FLAC, etc."""
-    if _USE_LIBROSA:
-        audio, sr = librosa.load(str(path), sr=None, mono=True)
-        return audio.astype(np.float32), sr
-    else:
-        import soundfile as sf
-        audio, sr = sf.read(str(path), dtype="float32")
-        if audio.ndim > 1:
-            audio = audio.mean(axis=1)  # stereo → mono
-        return audio, sr
+    """Load audio file — supports MP3, WAV, FLAC, M4A, etc. via pydub + ffmpeg."""
+    from pydub import AudioSegment
+    segment = AudioSegment.from_file(str(path))
+    segment = segment.set_channels(1)  # stereo → mono
+    sr = segment.frame_rate
+    samples = np.array(segment.get_array_of_samples(), dtype=np.float32)
+    # normalize to [-1.0, 1.0]
+    samples /= 2 ** (segment.sample_width * 8 - 1)
+    return samples, sr
 
 
 @dataclass
@@ -142,9 +131,15 @@ class AudioPreprocessor:
         target_sr: int = 16000,
     ):
         if sampling_rate != target_sr:
-            audio_tensor = torch.from_numpy(audio).unsqueeze(0)
-            resampler = torchaudio.transforms.Resample(sampling_rate, target_sr)
-            audio = resampler(audio_tensor).squeeze(0).numpy()
+            from pydub import AudioSegment
+            segment = AudioSegment(
+                (audio * 32767).astype(np.int16).tobytes(),
+                frame_rate=sampling_rate,
+                sample_width=2,
+                channels=1,
+            )
+            segment = segment.set_frame_rate(target_sr)
+            audio = np.array(segment.get_array_of_samples(), dtype=np.float32) / 32767
             sampling_rate = target_sr
 
         # Normalize to [-1, 1]
