@@ -28,7 +28,9 @@ class BenchmarkReporter:
         self,
         ranked_df: pd.DataFrame,
         top_models: List[str],
-        metadata: Dict = None
+        metadata: Dict = None,
+        per_model_samples: Dict[str, List[dict]] = None,
+        cost_data: Dict[str, dict] = None,
     ) -> str:
         """
         Generate markdown report
@@ -44,58 +46,96 @@ class BenchmarkReporter:
         md = []
 
         # Header
-        md.append("# Korean ASR Benchmark Results")
+        md.append("# Multilingual ASR Benchmark Results")
         md.append("")
-        md.append("## Objective Ranking for Kitchen Use Case")
+        md.append("## Kitchen Audio — EN / KO / ES / ZH")
         md.append("")
 
         # Metadata
         if metadata:
             md.append("### Configuration")
             md.append("")
-            md.append(f"- **Dataset**: {metadata.get('dataset', 'FLEURS Korean')}")
+            md.append(f"- **Dataset**: {metadata.get('dataset', 'Kitchen Audio Samples')}")
             md.append(f"- **Samples**: {metadata.get('num_samples', 'N/A')}")
             md.append(f"- **Models Tested**: {len(ranked_df)}")
+            md.append(f"- **Note**: Composite score is relative — meaningful only when comparing multiple models")
             md.append("")
 
         # Summary
         md.append("## Summary")
         md.append("")
-        md.append("This benchmark systematically evaluates ASR models for Korean language support,")
-        md.append("specifically for the 'Spoken Kitchen' use case with casual Korean, kitchen")
-        md.append("background noise simulation, and English loanwords (Konglish).")
+        md.append("Evaluates multilingual ASR models on real kitchen audio clips containing")
+        md.append("casual speech, background noise, and code-switched language (Korean + English).")
+        md.append("All models must auto-detect language without a language hint.")
         md.append("")
 
-        # Top 5 Models
-        md.append("## Top 5 Models")
+        # Model Results
+        md.append("## Model Results")
         md.append("")
 
-        for i, model_name in enumerate(top_models[:5], 1):
+        for i, model_name in enumerate(top_models[:2], 1):
             row = ranked_df[ranked_df['model'] == model_name].iloc[0]
 
             md.append(f"### {i}. {model_name}")
+            md.append("")
+            md.append("**Combined metrics (all 8 clips):**")
             md.append("")
             md.append("| Metric | Value |")
             md.append("|--------|-------|")
             md.append(f"| Composite Score | {row['composite_score']:.4f} |")
             md.append(f"| CER (Character Error Rate) | {row['cer']:.4f} |")
             md.append(f"| WER (Word Error Rate) | {row['wer']:.4f} |")
-            md.append(f"| CER/WER Ratio | {row['cer_wer_ratio']:.2f}x |")
-            md.append(f"| Loanword Accuracy | {row['loanword_accuracy']:.4f} |")
-            md.append(f"| Speed (samples/sec) | {row['samples_per_second']:.2f} |")
+            md.append(f"| Loanword / Code-switching Accuracy | {row['loanword_accuracy']:.4f} |")
+
+            cost = (cost_data or {}).get(model_name)
+            if cost:
+                md.append(f"| Audio Duration | {cost['audio_minutes']:.2f} min |")
+                md.append(f"| Price per Minute | ${cost['cost_per_minute']:.4f} |")
+                md.append(f"| Estimated Cost (this run) | ${cost['estimated_cost']:.6f} |")
+                md.append(f"| Avg Latency per Clip | {cost['avg_latency']:.2f}s |")
+                md.append(f"| Total Latency | {cost['total_latency']:.2f}s |")
             md.append("")
+
+            # Noise degradation delta
+            samples = (per_model_samples or {}).get(model_name, [])
+            clean = [s for s in samples if not s.get("noise")]
+            noisy = [s for s in samples if s.get("noise")]
+            if clean and noisy:
+                clean_cer = sum(s["cer"] for s in clean) / len(clean)
+                noisy_cer = sum(s["cer"] for s in noisy) / len(noisy)
+                delta = noisy_cer - clean_cer
+                md.append("**Noise impact:**")
+                md.append("")
+                md.append("| | Avg CER |")
+                md.append("|---|---------|")
+                md.append(f"| Clean clips | {clean_cer:.4f} |")
+                md.append(f"| Noisy clips | {noisy_cer:.4f} |")
+                md.append(f"| Degradation (Δ) | +{delta:.4f} |")
+                md.append("")
+
+            # Per-sample breakdown
+            samples = (per_model_samples or {}).get(model_name)
+            if samples:
+                md.append("**Per-sample breakdown:**")
+                md.append("")
+                md.append("| Sample | CER | WER |")
+                md.append("|--------|-----|-----|")
+                for s in samples:
+                    md.append(f"| {s['id']} | {s['cer']:.4f} | {s['wer']:.4f} |")
+                md.append("")
 
         # Full Rankings
         md.append("## Full Rankings")
         md.append("")
-        md.append("| Rank | Model | Score | CER | WER | CER/WER | Loanword | Speed |")
-        md.append("|------|-------|-------|-----|-----|---------|----------|-------|")
+        md.append("| Rank | Model | Composite Score | CER | WER | Loanword Acc | Cost (this run) |")
+        md.append("|------|-------|----------------|-----|-----|--------------|-----------------|")
 
         for _, row in ranked_df.iterrows():
+            cost = (cost_data or {}).get(row['model'])
+            cost_str = f"${cost['estimated_cost']:.6f}" if cost else "—"
             md.append(
                 f"| {row['rank']} | {row['model']} | {row['composite_score']:.4f} | "
-                f"{row['cer']:.4f} | {row['wer']:.4f} | {row['cer_wer_ratio']:.2f}x | "
-                f"{row['loanword_accuracy']:.4f} | {row['samples_per_second']:.2f} |"
+                f"{row['cer']:.4f} | {row['wer']:.4f} | {row['loanword_accuracy']:.4f} | {cost_str} |"
             )
 
         md.append("")
@@ -113,28 +153,21 @@ class BenchmarkReporter:
         md.append("  - Lower is better")
         md.append("  - Word-level accuracy")
         md.append("")
-        md.append("- **CER/WER Ratio**: Korean language characteristic")
-        md.append("  - Should be >2x for proper Korean handling")
-        md.append("  - Higher ratio indicates better handling of agglutinative structure")
-        md.append("")
-        md.append("- **Loanword Accuracy**: English loanword (Konglish) transcription")
-        md.append("  - Critical for kitchen context (e.g., 'oven', 'pasta', 'recipe')")
-        md.append("  - Higher is better")
-        md.append("")
-        md.append("- **Speed**: Inference speed in samples/second")
-        md.append("  - Important for real-time applications")
+        md.append("- **Loanword / Code-switching Accuracy**: accuracy on English loanwords and mixed-language terms")
+        md.append("  - Critical for kitchen context (e.g., 오븐, 레시피, 간 맞추기)")
         md.append("  - Higher is better")
         md.append("")
 
         # Composite Score
         md.append("### Composite Score")
         md.append("")
-        md.append("Weighted combination of all metrics:")
-        md.append("- CER: 40%")
-        md.append("- WER: 20%")
-        md.append("- Loanword Accuracy: 20%")
-        md.append("- Speed: 10%")
-        md.append("- CER/WER Ratio: 10%")
+        md.append("Weighted combination of metrics (scores are relative between models — run all 3 to get meaningful rankings):")
+        md.append("- CER: 55% — primary accuracy metric")
+        md.append("- WER: 30% — secondary accuracy metric")
+        md.append("- Loanword / code-switching accuracy: 15%")
+        md.append("")
+        md.append("*Speed excluded: measures API latency, not model quality.*")
+        md.append("*CER/WER ratio excluded: only meaningful for Korean-only models.*")
         md.append("")
 
         return "\n".join(md)
@@ -144,7 +177,9 @@ class BenchmarkReporter:
         ranked_df: pd.DataFrame,
         top_models: List[str],
         metadata: Dict = None,
-        filename: str = "benchmark_report.md"
+        filename: str = "benchmark_report.md",
+        per_model_samples: Dict[str, List[dict]] = None,
+        cost_data: Dict[str, dict] = None,
     ):
         """
         Save markdown report to file
@@ -155,7 +190,7 @@ class BenchmarkReporter:
             metadata: Additional metadata
             filename: Output filename
         """
-        md = self.generate_markdown_report(ranked_df, top_models, metadata)
+        md = self.generate_markdown_report(ranked_df, top_models, metadata, per_model_samples, cost_data)
         output_path = self.output_dir / filename
 
         with open(output_path, 'w') as f:
@@ -234,7 +269,7 @@ class BenchmarkReporter:
     def save_top_models_list(
         self,
         top_models: List[str],
-        filename: str = "top_5_models.txt"
+        filename: str = "top_models.txt"
     ):
         """
         Save list of top models to text file
@@ -246,10 +281,10 @@ class BenchmarkReporter:
         output_path = self.output_dir / filename
 
         with open(output_path, 'w') as f:
-            f.write("Top 5 Korean ASR Models for Kitchen Use Case\n")
+            f.write("Multilingual ASR Model Comparison — OpenAI vs Deepgram\n")
             f.write("=" * 50 + "\n\n")
 
-            for i, model in enumerate(top_models[:5], 1):
+            for i, model in enumerate(top_models[:2], 1):
                 f.write(f"{i}. {model}\n")
 
         print(f"Top models list saved to {output_path}")
@@ -258,21 +293,17 @@ class BenchmarkReporter:
         self,
         ranked_df: pd.DataFrame,
         top_models: List[str],
-        metadata: Dict = None
+        metadata: Dict = None,
+        per_model_samples: Dict[str, List[dict]] = None,
+        cost_data: Dict[str, dict] = None,
     ):
-        """
-        Generate all report formats
-
-        Args:
-            ranked_df: DataFrame with ranked models
-            top_models: List of top model names
-            metadata: Additional metadata
-        """
         print("\n" + "="*60)
         print("Generating Reports")
         print("="*60 + "\n")
 
-        self.save_markdown_report(ranked_df, top_models, metadata)
+        self.save_markdown_report(ranked_df, top_models, metadata,
+                                  per_model_samples=per_model_samples,
+                                  cost_data=cost_data)
         self.save_csv_results(ranked_df)
         self.save_json_results(ranked_df, metadata)
         self.save_yaml_results(ranked_df, metadata)
@@ -304,30 +335,22 @@ class PredictionExporter:
         model_name: str,
         references: List[str],
         predictions: List[str],
-        sample_ids: List[str] = None
+        sample_ids: List[str] = None,
+        per_sample_metrics: List[dict] = None,
     ):
-        """
-        Export predictions to file
-
-        Args:
-            model_name: Name of the model
-            references: Reference transcriptions
-            predictions: Model predictions
-            sample_ids: Sample IDs (optional)
-        """
         if sample_ids is None:
             sample_ids = [str(i) for i in range(len(references))]
 
-        # Create DataFrame
-        df = pd.DataFrame({
-            'sample_id': sample_ids,
-            'reference': references,
-            'prediction': predictions
-        })
+        rows = []
+        for i, (sid, ref, pred) in enumerate(zip(sample_ids, references, predictions)):
+            row = {"sample_id": sid, "reference": ref, "prediction": pred}
+            if per_sample_metrics and i < len(per_sample_metrics):
+                row["cer"] = per_sample_metrics[i].get("cer", "")
+                row["wer"] = per_sample_metrics[i].get("wer", "")
+            rows.append(row)
 
-        # Save to CSV
+        df = pd.DataFrame(rows)
         filename = f"{model_name.replace('/', '_')}_predictions.csv"
         output_path = self.output_dir / filename
         df.to_csv(output_path, index=False)
-
-        print(f"Predictions saved to {output_path}")
+        print(f"Per-sample results saved to {output_path}")
