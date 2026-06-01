@@ -136,9 +136,6 @@ class ASRBenchmark:
                 print(f"    pred: {prediction[:80]}{'...' if len(prediction) > 80 else ''}")
                 print(f"    CER: {sample_cer:.4f}  WER: {sample_wer:.4f}  latency: {latency:.2f}s")
 
-                # Rate limit pause — outside latency measurement so it doesn't skew results
-                if model_config.get("provider") == "gladia":
-                    time.sleep(30)
 
             total_time = time.time() - start_time
 
