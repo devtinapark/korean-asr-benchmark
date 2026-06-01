@@ -17,15 +17,6 @@ Both models were selected because they auto-detect language and handle code-swit
 | 1   | `gpt-4o-transcribe` | OpenAI API   | Latest transcription model; auto-detects language; strong on Korean + English code-switching |
 | 2   | Nova-3              | Deepgram API | Fast, `detect_language=true`; competitive accuracy; lowest cost per minute                   |
 
-**Why other models were excluded:**
-
-| Model                       | Reason                                                       |
-| --------------------------- | ------------------------------------------------------------ |
-| Google Cloud Speech-to-Text | Requires fixed language code per request — no auto-detection |
-| Azure Speech                | Auto-detection requires a separate pre-pass                  |
-| Naver Clova Speech          | Korean-only                                                  |
-| Gladia                      | Free tier rate limits too restrictive for batch evaluation   |
-
 ---
 
 ## Sources / Leaderboard Attribution
@@ -150,7 +141,7 @@ Composite score: CER 55% + WER 30% + Loanword 15%. Speed excluded (measures API 
 | Model                    | Price/min | Free tier   |
 | ------------------------ | --------- | ----------- |
 | OpenAI gpt-4o-transcribe | $0.006    | No          |
-| Deepgram Nova-3          | $0.0043   | $200 credit |
+| Deepgram Nova-3          | $0.0052   | $200 credit |
 
 ---
 
